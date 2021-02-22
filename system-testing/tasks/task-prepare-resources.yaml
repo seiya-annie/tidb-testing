@@ -6,6 +6,8 @@ spec:
   params:
     - name: run-id
       type: string
+    - name: init-version
+      type: string
   workspaces:
   - name: manifest
     mountPath: /adhoc-manifests
@@ -25,7 +27,7 @@ spec:
           - name: db
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
@@ -34,65 +36,56 @@ spec:
           - name: kv1
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
-                  size: 200GB
+                  size: 100GB
                   mountPath: /disks1
           - name: kv2
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
-                  size: 200GB
+                  size: 100GB
                   mountPath: /disks1
           - name: kv3
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
-                  size: 200GB
-                  mountPath: /disks1
-          - name: kv4
-            spec:
-              memory: 8GB
-              cores: 8
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 200GB
-                  mountPath: /disks1
-          - name: kv5
-            spec:
-              memory: 8GB
-              cores: 8
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 200GB
+                  size: 100GB
                   mountPath: /disks1
           - name: pd
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
                   size: 20GB
                   mountPath: /disks1
-          - name: ctl
+          - name: tiflash
             spec:
               memory: 8GB
-              cores: 8
+              cores: 4
               disks:
                 disk1:
                   kind: nvme
-                  size: 200GB
+                  size: 20GB
+                  mountPath: /disks1    
+          - name: ctl
+            spec:
+              memory: 8GB
+              cores: 4
+              disks:
+                disk1:
+                  kind: nvme
+                  size: 100GB
                   mountPath: /disks1
           - name: workload
             spec:
@@ -120,7 +113,7 @@ spec:
             deployDir: "/disks1/deploy"
             dataDir: "/disks1/data"
           version:
-            version: nightly
+            version: $(params.init-version)
           control: ctl
           tikv:
             - host: kv1
@@ -130,11 +123,15 @@ spec:
             - host: db
           pd:
             - host: pd
+          tiflash:
+            - host: tiflash
           monitor:
             - host: ctl
           grafana:
             - host: ctl
               port: 9000
+          alertmanager:
+            - host: ctl
       EOF
       echo "generating cluster manifest...done"
       cat "$(workspaces.manifest.path)/cluster.yaml"

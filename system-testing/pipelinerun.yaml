@@ -12,4 +12,6 @@ spec:
   params:
     - name: run-id
       value: systesting-demo
+    - name: init-version
+      value: v4.0.10
   timeout: "2h"

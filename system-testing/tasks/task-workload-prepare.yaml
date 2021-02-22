@@ -20,6 +20,7 @@ spec:
       kind: TestWorkload
       metadata:
         name: "$(params.run-id)"
+        namespace: user-lt
       spec:
         clusterTopologies:
           - name: "$(params.run-id)"
@@ -30,7 +31,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/mahjonp/bench-toolset
+              image: hub.pingcap.net/migration-test/migration:v1
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -38,16 +39,11 @@ spec:
                 - |
                   set -x
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
-                  isTpccExist=\`mysql -uroot -P4000 -h "\$tidbHost" -e "use tpcc;" > /dev/null && echo "yes" || echo "no"\`
-                  if [ "\$isTpccExist" == "no" ]; then
-                    mysql -uroot -P4000 -h "\$tidbHost" -e "create database tpcc;"
-                    # go-tpc -H \$tidbHost -P4000 -D tpcc tpcc prepare --warehouses 10
-                    sql="restore database * from 's3://benchmark/tpcc-10-nightly/?endpoint=http://minio.pingcap.net:9000&access-key=minioadmin&secret-access-key=minioadmin&force-path-style=true';"
-                    echo "\`date\` restore..."
-                    mysql -uroot -h \$tidbHost -P4000 -e "\$sql"
-                    echo "\`date\` restore...done"
+                  if [ ! -d "/UI_testcase"]; then
+                    echo "UI_testcase directory doesn't exist"
                   else
-                    echo "database tpcc already exists"
+                    cd UI_testcase
+                    ls -ltr
                   fi
 
       EOF

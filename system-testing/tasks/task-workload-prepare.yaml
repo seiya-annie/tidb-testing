@@ -20,7 +20,6 @@ spec:
       kind: TestWorkload
       metadata:
         name: "$(params.run-id)"
-        namespace: user-lt
       spec:
         clusterTopologies:
           - name: "$(params.run-id)"
@@ -31,7 +30,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v1
+              image: hub.pingcap.net/mahjonp/bench-toolset
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -39,13 +38,17 @@ spec:
                 - |
                   set -x
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
-                  if [ ! -d "/UI_testcase"]; then
-                    echo "UI_testcase directory doesn't exist"
+                  isTpccExist=\`mysql -uroot -P4000 -h "\$tidbHost" -e "use tpcc;" > /dev/null && echo "yes" || echo "no"\`
+                  if [ "\$isTpccExist" == "no" ]; then
+                    mysql -uroot -P4000 -h "\$tidbHost" -e "create database tpcc;"
+                    # go-tpc -H \$tidbHost -P4000 -D tpcc tpcc prepare --warehouses 10
+                    sql="restore database * from 's3://benchmark/tpcc-10-nightly/?endpoint=http://minio.pingcap.net:9000&access-key=minioadmin&secret-access-key=minioadmin&force-path-style=true';"
+                    echo "\`date\` restore..."
+                    mysql -uroot -h \$tidbHost -P4000 -e "\$sql"
+                    echo "\`date\` restore...done"
                   else
-                    cd UI_testcase
-                    ls -ltr
+                    echo "database tpcc already exists"
                   fi
-
       EOF
       echo "generating worload manifest...done"
       cat "$(workspaces.manifest.path)/restore.yaml"
@@ -61,7 +64,6 @@ spec:
         echo "test workload($twName) already exists, delete it."
         kubectl delete tw $twName
       fi
-
       echo "create test-workload($twName)..."
       kubectl apply -f "$(workspaces.manifest.path)/restore.yaml"
       while true

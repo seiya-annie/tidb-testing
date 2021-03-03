@@ -31,15 +31,37 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/mahjonp/bench-toolset
+              image: hub.pingcap.net/migration-test/migration:v6
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
                 - -c
                 - |
                   set -x
+
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
-                  go-tpc -H \$tidbHost -P4000 -D tpcc tpcc run --time 60m
+                  cat keywords/variables.robot
+                  tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" keywords/variables.robot
+                  sed -i 's/3000/9002/g' keywords/variables.robot
+
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  sed -i 's/34157/22/g' config.toml
+                  sed -i 's/insecure_key/\/upgrade-test\/insecure_key/g' config.toml
+
+                  cat keywords/variables.robot
+                  cat config.toml
+
+                  robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
+                  cat "result.txt"
+                  robot -i precheck UI_testcase/grafana.robot > g_result.txt
+                  cat g_result.txt
+                  cd Function_Test
+                  pytest precheck_test.py 
+                  cd ../API_TEST
+                  pytest prometheus_api_test.py
+                  
+                  
       EOF
       echo "generating workload-run manifest...done"
       cat "$file"
@@ -55,9 +77,10 @@ spec:
         echo "test workload($twName) already exists, delete it."
         kubectl delete tw $twName
       fi
-
+      
       echo "create test-workload($twName)..."
       kubectl apply -f "$(workspaces.manifest.path)/run.yaml"
+      count=50
       while true
       do
         state=`kubectl get tw "$twName" -ojsonpath='{.status.state}' || echo pending`
@@ -68,10 +91,13 @@ spec:
           break
         elif [ "running" == "$state" ]; then
           break
+        elif [ $count -lt 0 ]; then
+          break
         fi
         echo "workload wait another 5s"
         sleep 5
+        let "count--"
       done
       curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/PingCAP-QE/Naglfar/master/scripts/kubectl-naglfar-installer.sh | sh
       ~/.Naglfar/bin/naglfar logs $twName -n $(context.taskRun.namespace) --follow
-      kubectl delete tw $twName
+      # kubectl delete tw $twName

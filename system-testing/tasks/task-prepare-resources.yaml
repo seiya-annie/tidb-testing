@@ -23,79 +23,24 @@ spec:
       metadata:
         name: $(params.run-id)
       spec:
+        machines:
+           - name: m1
         items:
-          - name: db
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 10GB
-                  mountPath: /disks1
-          - name: kv1
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 100GB
-                  mountPath: /disks1
-          - name: kv2
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 100GB
-                  mountPath: /disks1
-          - name: kv3
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 100GB
-                  mountPath: /disks1
-          - name: pd
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 20GB
-                  mountPath: /disks1
-          - name: tiflash
-            spec:
-              memory: 8GB
-              cores: 4
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 20GB
-                  mountPath: /disks1    
           - name: ctl
             spec:
-              memory: 8GB
-              cores: 4
+              machine: m1
+              memory: 64GB
+              cores: 32
               disks:
                 disk1:
                   kind: nvme
-                  size: 100GB
+                  size: 50GB
                   mountPath: /disks1
           - name: workload
             spec:
-              memory: 8GB
-              cores: 8
-              disks:
-                disk1:
-                  kind: nvme
-                  size: 10GB
-                  mountPath: /disks1
+              machine: m1
+              memory: 4GB
+              cores: 2
       EOF
       echo "generating resources manifest...done"
       cat "$(workspaces.manifest.path)/resources.yaml"
@@ -116,20 +61,22 @@ spec:
             version: $(params.init-version)
           control: ctl
           tikv:
-            - host: kv1
-            - host: kv2
-            - host: kv3
+            - host: ctl
+              port: 20160
+              statusPort: 20180
+              deployDir: /disk1/deploy/tikv-20160
+              dataDir: /disk1/data/tikv-20160
+              logDir: /disk1/deploy/tikv-20160/log
           tidb:
-            - host: db
+            - host: ctl
           pd:
-            - host: pd
+            - host: ctl
           tiflash:
-            - host: tiflash
+            - host: ctl
           monitor:
             - host: ctl
           grafana:
             - host: ctl
-              port: 9000
           alertmanager:
             - host: ctl
       EOF

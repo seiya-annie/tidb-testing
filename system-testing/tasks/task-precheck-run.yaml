@@ -1,0 +1,100 @@
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: systesting-precheck-run
+spec:
+  params:
+    - name: run-id
+      type: string
+  workspaces:
+  - name: manifest
+    mountPath: /adhoc-manifests
+  steps:
+  - name: generate-run-manifest
+    image: hub.pingcap.net/qa/kubetools:20200730
+    script: |
+      #!/usr/bin/env bash
+      echo "generating workload manifest..."
+      file="$(workspaces.manifest.path)/run.yaml"
+      cat <<EOF > $file
+      apiVersion: naglfar.pingcap.com/v1
+      kind: TestWorkload
+      metadata:
+        name: "$(params.run-id)-precheck-run"
+      spec:
+        clusterTopologies:
+          - name: "$(params.run-id)"
+            aliasName: cluster
+        workloads:
+          - name: "$(params.run-id)"
+            dockerContainer:
+              resourceRequest:
+                name: "$(params.run-id)"
+                node: workload
+              image: hub.pingcap.net/migration-test/migration:v1
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -x
+
+                  tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
+                  cat keywords/variables.robot
+                  tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+
+                  cat keywords/variables.robot
+                  cat config.toml
+
+                  robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
+                  cat "result.txt"
+                  robot -i precheck UI_testcase/grafana.robot > g_result.txt
+                  cat g_result.txt
+                  cd Function_Test
+                  pytest precheck_test.py 
+                  cd ../API_TEST
+                  pytest prometheus_api_test.py
+                  
+                  
+      EOF
+      echo "generating workload-run manifest...done"
+      cat "$file"
+  - name: workload-tail-f
+    image: hub.pingcap.net/qa/kubetools:20200730
+    script: |
+      #!/usr/bin/env bash
+      set -xe
+      twName="$(params.run-id)-precheck-run"
+      echo "ensure test-workload($twName) does not exists"
+      exists=`kubectl get tw $twName >/dev/null && echo "yes" || echo "no"`
+      if [ "$exists" == "yes" ]; then
+        echo "test workload($twName) already exists, delete it."
+        kubectl delete tw $twName
+      fi
+      
+      echo "create test-workload($twName)..."
+      kubectl apply -f "$(workspaces.manifest.path)/run.yaml"
+      count=50
+      while true
+      do
+        state=`kubectl get tw "$twName" -ojsonpath='{.status.state}' || echo pending`
+        echo "current workload state: $state"
+        if [ "succeeded" == "$state" ]; then
+          break
+        elif [ "failed" == "$state" ]; then
+          break
+        elif [ "running" == "$state" ]; then
+          break
+        elif [ $count -lt 0 ]; then
+          break
+        fi
+        echo "workload wait another 5s"
+        sleep 5
+        let "count--"
+      done
+      curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/PingCAP-QE/Naglfar/master/scripts/kubectl-naglfar-installer.sh | sh
+      ~/.Naglfar/bin/naglfar logs $twName -n $(context.taskRun.namespace) --follow
+      # kubectl delete tw $twName

@@ -13,5 +13,6 @@ spec:
     script: |
       #!/usr/bin/env bash
       kubectl delete tct $(params.run-id)
-      kubectl delete tw  $(params.run-id)
+      kubectl delete tw  $(params.run-id)-precheck-run
+      kubectl delete tw  $(params.run-id)-postcheck-run
       kubectl delete trr $(params.run-id)

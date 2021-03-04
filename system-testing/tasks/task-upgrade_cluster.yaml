@@ -1,0 +1,38 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: systesting-upgrade-ops
+spec:
+  params:
+    - name: run-id
+      type: string
+    - name: target-version
+      type: string
+  workspaces:
+  - name: manifest
+    mountPath: /adhoc-manifests
+  steps:
+  - name: generate-manifest
+    image: hub.pingcap.net/qa/kubetools:20200730
+    script: |
+      #!/usr/bin/env bash
+      kubectl patch tct $(params.run-id)  --type=json -p='[{"op": "replace", "path": "/spec/tidbCluster/version/version","value":"$(params.target-version)"}]' 
+      
+  - name: wait-until-cluster-started
+    image: hub.pingcap.net/qa/kubetools:20200730
+    script: |
+      #!/usr/bin/env bash
+      count=30
+      while true
+      do
+        state=`kubectl get tct "$(params.run-id)" -ojsonpath='{.status.state}' || echo unknown`
+        echo "current resource state: $state"
+        if [ "ready" = "$state" ]; then
+            break
+        elif [ $count -lt 0 ]; then
+            break
+        fi
+        echo "test resources isn't ready now, wait another 10s..."
+        sleep 10
+        let "count--"
+      done

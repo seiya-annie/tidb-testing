@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: systesting-workload-run
+  name: systesting-postcheck-run
 spec:
   params:
     - name: run-id
@@ -14,24 +14,24 @@ spec:
     image: hub.pingcap.net/qa/kubetools:20200730
     script: |
       #!/usr/bin/env bash
-      echo "generating worload manifest..."
-      file="$(workspaces.manifest.path)/run.yaml"
+      echo "generating workload manifest..."
+      file="$(workspaces.manifest.path)/run1.yaml"
       cat <<EOF > $file
       apiVersion: naglfar.pingcap.com/v1
       kind: TestWorkload
       metadata:
-        name: "$(params.run-id)-workload-run"
+        name: "$(params.run-id)-postcheck-run"
       spec:
         clusterTopologies:
           - name: "$(params.run-id)"
             aliasName: cluster
         workloads:
-          - name: "$(params.run-id)"
+          - name: "$(params.run-id)-postcheck"
             dockerContainer:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v6
+              image: hub.pingcap.net/migration-test/migration:v1
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -43,21 +43,17 @@ spec:
                   cat keywords/variables.robot
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
                   sed -i "s/172\.16\.4\.82/\$tidbHost/g" keywords/variables.robot
-                  sed -i 's/3000/9002/g' keywords/variables.robot
-
                   sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
-                  sed -i 's/34157/22/g' config.toml
-                  sed -i 's/insecure_key/\/upgrade-test\/insecure_key/g' config.toml
 
                   cat keywords/variables.robot
                   cat config.toml
 
-                  robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
+                  robot -i postcheck UI_testcase/tidb_dashboard.robot > result.txt
                   cat "result.txt"
-                  robot -i precheck UI_testcase/grafana.robot > g_result.txt
+                  robot -i postcheck UI_testcase/grafana.robot > g_result.txt
                   cat g_result.txt
                   cd Function_Test
-                  pytest precheck_test.py 
+                  pytest postcheck_test.py 
                   cd ../API_TEST
                   pytest prometheus_api_test.py
                   
@@ -70,7 +66,7 @@ spec:
     script: |
       #!/usr/bin/env bash
       set -xe
-      twName="$(params.run-id)-workload-run"
+      twName="$(params.run-id)-postcheck-run"
       echo "ensure test-workload($twName) does not exists"
       exists=`kubectl get tw $twName >/dev/null && echo "yes" || echo "no"`
       if [ "$exists" == "yes" ]; then
@@ -79,7 +75,7 @@ spec:
       fi
       
       echo "create test-workload($twName)..."
-      kubectl apply -f "$(workspaces.manifest.path)/run.yaml"
+      kubectl apply -f "$(workspaces.manifest.path)/run1.yaml"
       count=50
       while true
       do

@@ -41,6 +41,11 @@ spec:
               machine: m1
               memory: 4GB
               cores: 2
+          - name: workload2
+            spec:
+              machine: m1
+              memory: 4GB
+              cores: 2
       EOF
       echo "generating resources manifest...done"
       cat "$(workspaces.manifest.path)/resources.yaml"

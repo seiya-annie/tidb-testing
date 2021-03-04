@@ -30,7 +30,7 @@ spec:
             dockerContainer:
               resourceRequest:
                 name: "$(params.run-id)"
-                node: workload
+                node: workload2
               image: hub.pingcap.net/migration-test/migration:v1
               imagePullPolicy: IfNotPresent
               command:

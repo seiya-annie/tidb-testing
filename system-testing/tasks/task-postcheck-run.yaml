@@ -40,10 +40,12 @@ spec:
                   set -x
 
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
+                  tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
+
                   cat keywords/variables.robot
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
-                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" keywords/variables.robot
-                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
 
                   cat keywords/variables.robot
                   cat config.toml
@@ -56,6 +58,8 @@ spec:
                   pytest postcheck_test.py 
                   cd ../API_TEST
                   pytest prometheus_api_test.py
+
+
                   
                   
       EOF

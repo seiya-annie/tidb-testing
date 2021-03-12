@@ -32,7 +32,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v1
+              image: hub.pingcap.net/migration-test/migration:v3
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -41,24 +41,50 @@ spec:
                   set -x
 
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
+                  tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
+
+                  # -------test bank, will keep run during upgrade
+                  isBankExist=\`mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "use bank; show tables;" | grep customer > /dev/null && echo "yes" || echo "no"\`
+                  if [ "\$isBankExist" == "no" ]; then
+                    mysql -uroot -P"\$tidbPort" -h "\$tidbHost" -e "create database bank;"
+                    echo "\`date\` prepare..."
+                    cd /tools
+                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" clean
+                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 10000 --employees 10000 init 
+                    echo "\`date\` init...done"
+                    \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 1800 --time 20 \
+                    --config config.yaml run > bank.log 2>&1 & \`
+                    sleep 60s
+                    tail -n 50 bank.log
+                  else
+                    echo "database bank already exists"
+                  fi   
+
+
+                  # ------test dashboard, alert, grafana, prometheus
                   cat keywords/variables.robot
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
-                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" keywords/variables.robot
-                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
-
+                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
                   cat keywords/variables.robot
                   cat config.toml
-
                   robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
                   cat "result.txt"
                   robot -i precheck UI_testcase/grafana.robot > g_result.txt
                   cat g_result.txt
-                  cd Function_Test
-                  pytest precheck_test.py 
                   cd ../API_TEST
                   pytest prometheus_api_test.py
-                  
-                  
+
+                  #------test cluster_status, config default value, system variables
+                  cd Function_Test
+                  pytest precheck_test.py 
+
+
+
+
+
+
+                                     
       EOF
       echo "generating workload-run manifest...done"
       cat "$file"

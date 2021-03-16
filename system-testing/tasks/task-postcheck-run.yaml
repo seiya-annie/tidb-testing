@@ -31,7 +31,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload2
-              image: hub.pingcap.net/migration-test/migration:v1
+              image: hub.pingcap.net/migration-test/migration:v7
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -42,23 +42,40 @@ spec:
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
                   tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
 
-                  cat keywords/variables.robot
+                  cd /upgrade-test/
+                  cat /upgrade-test/keywords/variables.robot
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
+                  ctlipstr=\`echo $ctlip | sed 's/\./\\\\./g'\`
+                  ctlportstr=\`echo $ctlport\`
+                  #sed -i "s/Chrome/headlessChrome/g" keywords/variables.robot
                   sed -i "s/172\.16\.5\.101/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
                   sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
+                  sed -i "s/22/\$ctlportstr/g" config.toml
 
-                  cat keywords/variables.robot
-                  cat config.toml
+                  cat /upgrade-test/keywords/variables.robot
+                  cat /upgrade-test/config.toml
 
-                  robot -i postcheck UI_testcase/tidb_dashboard.robot > result.txt
+                  robot -i postcheck /upgrade-test/UI_testcase/tidb_dashboard.robot > result.txt
                   cat "result.txt"
-                  robot -i postcheck UI_testcase/grafana.robot > g_result.txt
+                  robot -i postcheck /upgrade-test/UI_testcase/grafana.robot > g_result.txt
                   cat g_result.txt
-                  cd Function_Test
-                  pytest postcheck_test.py 
-                  cd ../API_TEST
-                  pytest prometheus_api_test.py
 
+                  cd /upgrade-test/API_TEST
+                  pytest prometheus_api_test.py
+                  
+                  # get system variables
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show variables;' | tee /upgrade-test/postcheck-result/systemvariable-post.txt
+                  cat /upgrade-test/postcheck-result/systemvariable-post.txt
+
+                  # get user privi
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/postcheck-result/qatest-priv-post.txt
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for root;' >> /upgrade-test/postcheck-result/qatest-priv-post.txt
+
+                  cd /upgrade-test/Function_Test
+                  pytest postcheck_test.py 
 
                   
                   

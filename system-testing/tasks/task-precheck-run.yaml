@@ -17,6 +17,10 @@ spec:
       #!/usr/bin/env bash
       echo "generating workload manifest..."
       file="$(workspaces.manifest.path)/run.yaml"
+      ctlip=`kubectl get tr | awk '$1 ~ /ctl/ {print $3}'`
+      ctlport=`kubectl get tr | awk '$1 ~ /ctl/ {print $4}'`
+      ctlclusterip=`kubectl get tr | awk '$1 ~ /ctl/ {print $5}'`
+      echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
       cat <<EOF > $file
       apiVersion: naglfar.pingcap.com/v1
       kind: TestWorkload
@@ -32,62 +36,78 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v3
+              image: hub.pingcap.net/migration-test/migration:v7
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
                 - -c
                 - |
                   set -x
-
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
                   tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
 
                   # -------test bank, will keep run during upgrade
+                  cd /tools
                   isBankExist=\`mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "use bank; show tables;" | grep customer > /dev/null && echo "yes" || echo "no"\`
                   if [ "\$isBankExist" == "no" ]; then
                     mysql -uroot -P"\$tidbPort" -h "\$tidbHost" -e "create database bank;"
                     echo "\`date\` prepare..."
-                    cd /tools
-                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" clean
-                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 10000 --employees 10000 init 
-                    echo "\`date\` init...done"
-                    \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 1800 --time 20 \
-                    --config config.yaml run > bank.log 2>&1 & \`
-                    sleep 60s
-                    tail -n 50 bank.log
+                    
+                    # ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" clean
+                    # ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 10000 --employees 10000 init 
+                    # echo "\`date\` init...done"
+                    # \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 1800 --time 20 \
+                    # --config config.yaml run > bank.log 2>&1 & \`
+                    # sleep 60s
+                    # tail -n 50 bank.log
                   else
                     echo "database bank already exists"
-                  fi   
-
+                  fi  
 
                   # ------test dashboard, alert, grafana, prometheus
+                  cd /upgrade-test/
                   cat keywords/variables.robot
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
+                  ctlipstr=\`echo $ctlip | sed 's/\./\\\\./g'\`
+                  ctlportstr=\`echo $ctlport\`
+                  #sed -i "s/Chrome/headlessChrome/g" keywords/variables.robot
                   sed -i "s/172\.16\.5\.101/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
                   sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
+                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
+                  sed -i "s/22/\$ctlportstr/g" config.toml
+
                   cat keywords/variables.robot
                   cat config.toml
-                  robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
-                  cat "result.txt"
-                  robot -i precheck UI_testcase/grafana.robot > g_result.txt
-                  cat g_result.txt
-                  cd ../API_TEST
-                  pytest prometheus_api_test.py
+
+                  # robot -i precheck UI_testcase/tidb_dashboard.robot > result.txt
+                  # cat "result.txt"
+                  # robot -i precheck UI_testcase/grafana.robot > g_result.txt
+                  # cat g_result.txt
+                  # cd /upgrade-test/API_TEST
+                  # pytest prometheus_api_test.py
+                  
+
+                  # get system variables
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show variables;' | tee /upgrade-test/precheck-result/systemvariable_pre.txt
+                  cat /upgrade-test/precheck-result/systemvariable_pre.txt
+
+                  # create user and get user privi
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create user qatest;grant Create on *.* to qatest;'
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/precheck-result/qatest-priv-pre.txt
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for root;' >> /upgrade-test/precheck-result/qatest-priv-pre.txt
+                  cat /upgrade-test/precheck-result/qatest-priv-pre.txt
 
                   #------test cluster_status, config default value, system variables
-                  cd Function_Test
+                  cd /upgrade-test/Function_Test
                   pytest precheck_test.py 
-
-
-
-
-
-
                                      
       EOF
       echo "generating workload-run manifest...done"
       cat "$file"
+      
+
   - name: workload-tail-f
     image: hub.pingcap.net/qa/kubetools:20200730
     script: |

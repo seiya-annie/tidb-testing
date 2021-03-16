@@ -77,23 +77,23 @@ spec:
               port: 14000
           pd:
             - host: ctl
-              port: 12379
-              config:
+              clientPort: 12379
+              config: |
                   enable-placement-rules: true
                   schedule.low-space-ratio: 0.9
                   replication.max-replicas: 1
           tiflash:
             - host: ctl
-              port: 19000
+              tcpPort: 19000
           monitor:
             - host: ctl
               port: 19090
           grafana:
             - host: ctl
               port: 13000
-          alertmanager:
+          alertmanager_servers:
             - host: ctl
-              port: 19093
+              webPort: 19093
       EOF
       echo "generating cluster manifest...done"
       cat "$(workspaces.manifest.path)/cluster.yaml"

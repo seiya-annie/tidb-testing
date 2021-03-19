@@ -16,22 +16,22 @@ spec:
   workspaces:
     - name: manifest
   tasks:
-    # - name: env-prepare
-    #   taskRef:
-    #     name: systesting-prepare-env
-    #   params:
-    #     - name: run-id
-    #       value: "$(params.run-id)"
-    #     - name: init-version
-    #       value: "$(params.init-version)"
-    #   workspaces:
-    #     - name: manifest
-    #       workspace: manifest
+    - name: env-prepare
+      taskRef:
+        name: systesting-prepare-env
+      params:
+        - name: run-id
+          value: "$(params.run-id)"
+        - name: init-version
+          value: "$(params.init-version)"
+      workspaces:
+        - name: manifest
+          workspace: manifest
     - name: precheck-run
       taskRef:
         name: systesting-precheck-run
-      # runAfter:
-      #   - env-prepare
+      runAfter:
+        - env-prepare
       params:
         - name: run-id
           value:
@@ -39,37 +39,37 @@ spec:
       workspaces:
         - name: manifest
           workspace: manifest
-    # - name: upgrade
-    #   taskRef:
-    #     name: systesting-upgrade-ops
-    #   runAfter:
-    #     - precheck-run
-    #   params:
-    #     - name: run-id
-    #       value:
-    #       value: "$(params.run-id)"
-    #     - name: target-version
-    #       value: "$(params.target-version)"
-    #   workspaces:
-    #     - name: manifest
-    #       workspace: manifest  
-    # - name: postcheck-run
-    #   taskRef:
-    #     name: systesting-postcheck-run
-    #   runAfter:
-    #     - upgrade
-    #   params:
-    #     - name: run-id
-    #       value:
-    #       value: "$(params.run-id)"
-    #   workspaces:
-    #     - name: manifest
-    #       workspace: manifest      
-    # - name: teardown
-    #   taskRef:
-    #     name: systesting-teardown
-    #   runAfter:
-    #     - postcheck-run
-    #   params:
-    #     - name: run-id
-    #       value: "$(params.run-id)"
+    - name: upgrade
+      taskRef:
+        name: systesting-upgrade-ops
+      runAfter:
+        - precheck-run
+      params:
+        - name: run-id
+          value:
+          value: "$(params.run-id)"
+        - name: target-version
+          value: "$(params.target-version)"
+      workspaces:
+        - name: manifest
+          workspace: manifest  
+    - name: postcheck-run
+      taskRef:
+        name: systesting-postcheck-run
+      runAfter:
+        - upgrade
+      params:
+        - name: run-id
+          value:
+          value: "$(params.run-id)"
+      workspaces:
+        - name: manifest
+          workspace: manifest      
+    - name: teardown
+      taskRef:
+        name: systesting-teardown
+      runAfter:
+        - postcheck-run
+      params:
+        - name: run-id
+          value: "$(params.run-id)"

@@ -31,7 +31,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload2
-              image: hub.pingcap.net/migration-test/migration:v7
+              image: hub.pingcap.net/migration-test/migration:v9
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -52,8 +52,9 @@ spec:
                   sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
                   sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
                   sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  sed -i "s/4\.0\.11/\5\.0\.0/g" config.toml
                   echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
-                  sed -i "s/22/\$ctlportstr/g" config.toml
+                  $sed -i "s/22/\$ctlportstr/g" config.toml
 
                   cat /upgrade-test/keywords/variables.robot
                   cat /upgrade-test/config.toml
@@ -97,7 +98,7 @@ spec:
       
       echo "create test-workload($twName)..."
       kubectl apply -f "$(workspaces.manifest.path)/run1.yaml"
-      count=50
+      count=100
       while true
       do
         state=`kubectl get tw "$twName" -ojsonpath='{.status.state}' || echo pending`
@@ -112,7 +113,7 @@ spec:
           break
         fi
         echo "workload wait another 5s"
-        sleep 5
+        sleep 20
         let "count--"
       done
       curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/PingCAP-QE/Naglfar/master/scripts/kubectl-naglfar-installer.sh | sh

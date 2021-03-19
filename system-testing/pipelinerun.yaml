@@ -15,5 +15,5 @@ spec:
     - name: init-version
       value: v4.0.10
     - name: target-version
-      value: v4.0.11
+      value: v5.0.0-pre
   timeout: "2h"

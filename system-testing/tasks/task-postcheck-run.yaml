@@ -31,7 +31,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload2
-              image: hub.pingcap.net/migration-test/migration:v9
+              image: hub.pingcap.net/migration-test/migration:v10
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash

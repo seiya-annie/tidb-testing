@@ -76,6 +76,8 @@ spec:
           tidb:
             - host: ctl
               port: 14000
+              config: |
+                  
           pd:
             - host: ctl
               clientPort: 12379

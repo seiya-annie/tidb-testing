@@ -65,11 +65,11 @@ spec:
       workspaces:
         - name: manifest
           workspace: manifest      
-    - name: teardown
-      taskRef:
-        name: systesting-teardown
-      runAfter:
-        - postcheck-run
-      params:
-        - name: run-id
-          value: "$(params.run-id)"
+    # - name: teardown
+    #   taskRef:
+    #     name: systesting-teardown
+    #   runAfter:
+    #     - postcheck-run
+    #   params:
+    #     - name: run-id
+    #       value: "$(params.run-id)"

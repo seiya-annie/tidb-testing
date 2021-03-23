@@ -59,6 +59,7 @@ spec:
       spec:
         resourceRequest: $(params.run-id)
         tidbCluster:
+          tiupMirror: http://staging.tiup-server.pingcap.net
           global:
             deployDir: "/disks1/deploy"
             dataDir: "/disks1/data"  

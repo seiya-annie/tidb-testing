@@ -16,6 +16,10 @@ spec:
       #!/usr/bin/env bash
       echo "generating workload manifest..."
       file="$(workspaces.manifest.path)/run1.yaml"
+      ctlip=`kubectl get tr | awk '$1 ~ /ctl/ {print $5}'`
+      ctlport=`kubectl get tr | awk '$1 ~ /ctl/ {print $4}'`
+      ctlclusterip=`kubectl get tr | awk '$1 ~ /ctl/ {print $5}'`
+      echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
       cat <<EOF > $file
       apiVersion: naglfar.pingcap.com/v1
       kind: TestWorkload
@@ -31,7 +35,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload2
-              image: hub.pingcap.net/migration-test/migration:v10
+              image: hub.pingcap.net/migration-test/migration:v15
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -54,7 +58,7 @@ spec:
                   sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
                   sed -i "s/4\.0\.11/\5\.0\.0/g" config.toml
                   echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
-                  $sed -i "s/22/\$ctlportstr/g" config.toml
+                  #sed -i "s/22/\$ctlportstr/g" config.toml
 
                   cat /upgrade-test/keywords/variables.robot
                   cat /upgrade-test/config.toml
@@ -77,6 +81,13 @@ spec:
 
                   cd /upgrade-test/Function_Test
                   pytest postcheck_test.py 
+
+                  #------tiflash--------
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'desc select count(uid) from bank.account;' |tee /upgrade-test/postcheck-result/tiflash-postcheck.txt
+                  count=\`grep "tiflash" /upgrade-test/postcheck-result/tiflash-postcheck.txt | wc -l\`
+                  if [ \$count -gt 0 ]; then
+                      echo "tiflash work normal"
+                  fi
 
                   
                   

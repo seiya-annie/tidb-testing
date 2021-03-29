@@ -36,7 +36,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v10
+              image: hub.pingcap.net/migration-test/migration:v15
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -46,7 +46,7 @@ spec:
                   tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
                   tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
 
-                  # -------test bank, will keep run during upgrade
+                  #-------test bank, will keep run during upgrade
                   cd /tools
                   isBankExist=\`mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "use bank; show tables;" | grep customer > /dev/null && echo "yes" || echo "no"\`
                   if [ "\$isBankExist" == "no" ]; then
@@ -56,7 +56,7 @@ spec:
                     ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" clean
                     ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 10000 --employees 10000 init 
                     echo "\`date\` init...done"
-                    \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 1800 --time 20 \
+                    \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --time 1800 \
                     --config config.yaml run > bank.log 2>&1 & \`
                     sleep 60s
                     tail -n 50 bank.log
@@ -104,6 +104,15 @@ spec:
                   pytest precheck_test.py 
 
                   #------tiflash--------
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'alter table bank.account SET TIFLASH REPLICA 1;' 
+                  sleep 5s
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "SELECT * FROM information_schema.tiflash_replica WHERE TABLE_SCHEMA = 'bank' and TABLE_NAME = 'account';"
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'desc select count(uid) from bank.account;' | tee /upgrade-test/precheck-result/tiflash-precheck.txt
+                  count=\`grep "tiflash" /upgrade-test/precheck-result/tiflash-precheck.txt | wc -l\`
+                  if [ \$count -gt 0 ]; then
+                      echo "tiflash work normal"
+                  fi
+
 
                                      
       EOF
@@ -147,3 +156,4 @@ spec:
       curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/PingCAP-QE/Naglfar/master/scripts/kubectl-naglfar-installer.sh | sh
       ~/.Naglfar/bin/naglfar logs $twName -n $(context.taskRun.namespace) --follow
       # kubectl delete tw $twName
+    

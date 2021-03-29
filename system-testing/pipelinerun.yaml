@@ -13,7 +13,7 @@ spec:
     - name: run-id
       value: systesting-demo
     - name: init-version
-      value: v4.0.10
+      value: v3.0.19
     - name: target-version
       value: v5.0.0-nightly
   timeout: "2h"

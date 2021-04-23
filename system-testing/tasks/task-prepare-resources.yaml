@@ -25,6 +25,7 @@ spec:
       spec:
         machines:
            - name: m1
+           - name: m2
         items:
           - name: ctl
             spec:
@@ -36,14 +37,39 @@ spec:
                   kind: nvme
                   size: 50GB
                   mountPath: /disks1
-          - name: workload
+          - name: haproxy
             spec:
               machine: m1
+              memory: 16GB
+              cores: 2
+          - name: db
+            spec:
+              machine: m1
+              memory: 8GB
+              cores: 4
+              disks:
+                disk1:
+                  kind: nvme
+                  size: 50GB
+                  mountPath: /disks1 
+          - name: kv
+            spec:
+              machine: m2
+              memory: 64GB
+              cores: 32
+              disks:
+                disk1:
+                  kind: nvme
+                  size: 50GB
+                  mountPath: /disks1  
+          - name: workload
+            spec:
+              machine: m2
               memory: 4GB
               cores: 2
           - name: workload2
             spec:
-              machine: m1
+              machine: m2
               memory: 4GB
               cores: 2
       EOF
@@ -59,31 +85,145 @@ spec:
       spec:
         resourceRequest: $(params.run-id)
         tidbCluster:
-          tiupMirror: http://staging.tiup-server.pingcap.net
+          tiupMirror: https://tiup-mirrors.pingcap.com
           global:
             deployDir: "/disks1/deploy"
             dataDir: "/disks1/data"  
           version:
             version: $(params.init-version)
+          serverConfigs:
+            pd: |-
+              replication.location-labels: ["zone", "host"] 
+              enable-placement-rules: true
+              enable-redact-log: true
+              schedule.low-space-ratio: 0.9
+              replication.max-replicas: 1 
+            tidb: |-
+              graceful-wait-before-shutdown: 1
+              oom-use-tmp-storage: false
+              tmp-storage-quota: 8000000
+              skip-register-to-dashboard: true
+              enable-telemetry: false
+              repair-mode: true
+              new_collations_enabled_on_first_bootstrap: true
+              performance.gogc: 80
+              tikv-client.enable-chunk-rpc: false
+              tikv-client.store-liveness-timeout: "2s"
+              stmt-summary.enable-internal-query: true
+              experimental.allow-expression-index: true
+              prepared-plan-cache.enabled: true
+              oom-action: cancel
+              performance.max-memory: 5000
+              performance.max-txn-ttl: 600000
+              performance.feedback-probability: 0.05
+              performance.query-feedback-limit: 1024
+              tikv-client.copr-cache.admission-min-process-ms: 5
+              tikv-client.copr-cache.admission-max-ranges: 500
+              alter-primary-key: true
+              enable-streaming: false
+            tikv: |-
+              gc.enable-compaction-filter: false
+              raftstore.early-apply: true
+              rocksdb.rate-bytes-per-sec: 10GiB
+
           control: ctl
+          haProxy:
+            host: haproxy
+            port: 9999
+            version: latest
+            config: |-
+              global
+                daemon
+                maxconn 256
+              defaults
+                mode tcp
+                timeout connect 5000ms
+                timeout client 6000000ms
+                timeout server 6000000ms
           tikv:
-            - host: ctl
+            - host: kv
               port: 20160
               statusPort: 20180
               deployDir: /disk1/deploy/tikv-20160
               dataDir: /disk1/data/tikv-20160
               logDir: /disk1/deploy/tikv-20160/log
+              config: |-
+                server.labels:
+                  zone: z1
+                  host: h1
+
+            - host: kv
+              port: 20260
+              statusPort: 20280
+              deployDir: /disk1/deploy/tikv-20260
+              dataDir: /disk1/data/tikv-20260
+              logDir: /disk1/deploy/tikv-20260/log
+              config: |-
+                server.labels:
+                  zone: z1
+                  host: h2
+            - host: kv
+              port: 20360
+              statusPort: 20380
+              deployDir: /disk1/deploy/tikv-20360
+              dataDir: /disk1/data/tikv-20360
+              logDir: /disk1/deploy/tikv-20360/log
+              config: |-
+                server.labels:
+                  zone: z1
+                  host: h3
+            - host: kv
+              port: 20460
+              statusPort: 20480
+              deployDir: /disk1/deploy/tikv-20460
+              dataDir: /disk1/data/tikv-20460
+              logDir: /disk1/deploy/tikv-20460/log
+              config: |-
+                server.labels:
+                  zone: z1
+                  host: h4
           tidb:
-            - host: ctl
+            - host: db
               port: 14000
+              statusPort: 11080
+            - host: db
+              port: 4000
+              statusPort: 10080
 
           pd:
             - host: ctl
+              clientPort: 2379
+              peerPort: 2380
+              deployDir: /disk1/deploy/pd-2379
+              dataDir: /disk1/data/pd-2379
+              logDir: /disk1/deploy/pd-2379/log
+              # config: |
+              #     enable-placement-rules: true
+              #     schedule.low-space-ratio: 0.9
+              #     replication.max-replicas: 1
+                 
+            - host: ctl
               clientPort: 12379
-              config: |
-                  enable-placement-rules: true
-                  schedule.low-space-ratio: 0.9
-                  replication.max-replicas: 1
+              peerPort: 12380
+              deployDir: /disk1/deploy/pd-12379
+              dataDir: /disk1/data/pd-12379
+              logDir: /disk1/deploy/pd-12379/log
+              # config: |
+              #     enable-placement-rules: true
+              #     schedule.low-space-ratio: 0.9
+              #     replication.max-replicas: 1
+                  
+            - host: ctl
+              clientPort: 22379
+              peerPort: 22380
+              deployDir: /disk1/deploy/pd-22379
+              dataDir: /disk1/data/pd-22379
+              logDir: /disk1/deploy/pd-22379/log
+              # config: |
+              #     enable-placement-rules: true
+              #     schedule.low-space-ratio: 0.9
+              #     replication.max-replicas: 1  
+                     
           tiflash:
             - host: ctl
               tcpPort: 19000

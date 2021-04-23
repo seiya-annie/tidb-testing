@@ -19,7 +19,7 @@ spec:
       file="$(workspaces.manifest.path)/run.yaml"
       ctlip=`kubectl get tr | awk '$1 ~ /ctl/ {print $5}'`
       ctlport=`kubectl get tr | awk '$1 ~ /ctl/ {print $4}'`
-      ctlclusterip=`kubectl get tr | awk '$1 ~ /ctl/ {print $5}'`
+      haip=`kubectl get tr | awk '$1 ~ /haproxy/ {print $5}'`
       echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
       cat <<EOF > $file
       apiVersion: naglfar.pingcap.com/v1
@@ -36,15 +36,17 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v15
+              image: hub.pingcap.net/migration-test/migration:v17
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
                 - -c
                 - |
                   set -x
-                  tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
-                  tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
+                  # tidbHost=\`echo \$cluster_tidb0 | awk -F ":" '{print \$1}'\`
+                  # tidbPort=\`echo \$cluster_tidb0 | awk -F ":" '{print \$2}'\`
+                  tidbHost=$haip
+                  tidbPort=9999
 
                   #-------test bank, will keep run during upgrade
                   cd /tools
@@ -52,17 +54,16 @@ spec:
                   if [ "\$isBankExist" == "no" ]; then
                     mysql -uroot -P"\$tidbPort" -h "\$tidbHost" -e "create database bank;"
                     echo "\`date\` prepare..."
-                    
                     ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" clean
-                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 10000 --employees 10000 init 
+                    ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --accounts 1000 --employees 1000 init 
                     echo "\`date\` init...done"
-                    \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 50 --time 1800 \
-                    --config config.yaml run > bank.log 2>&1 & \`
-                    sleep 60s
-                    tail -n 50 bank.log
                   else
                     echo "database bank already exists"
-                  fi  
+                  fi 
+                  \`nohup ./bank --dsn "root:@tcp(\$tidbHost:\$tidbPort)/bank?charset=utf8&parseTime=True" --threads 5 --time 590 \
+                    --config config.yaml run > bank.log 2>&1 & \`
+                  sleep 600
+                  tail -n 50 bank.log 
 
                   # ------test dashboard, alert, grafana, prometheus
                   cd /upgrade-test/
@@ -71,10 +72,11 @@ spec:
                   ctlipstr=\`echo $ctlip | sed 's/\./\\\\./g'\`
                   ctlportstr=\`echo $ctlport\`
                   #sed -i "s/Chrome/headlessChrome/g" keywords/variables.robot
-                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" keywords/variables.robot
+                  sed -i "s/172\.16\.5\.101/\$ctlipstr/g" keywords/variables.robot
                   sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
-                  sed -i "s/172\.16\.5\.101/\$tidbHost/g" config.toml
-                  sed -i "s/172\.16\.4\.82/\$tidbHost/g" config.toml
+                  sed -i "s/172\.16\.5\.101/\$ctlipstr/g" config.toml
+                  sed -i "s/172\.16\.4\.82/\$ctlipstr/g" config.toml
+                  sed -i "s/v5\.0\.0/v5\.0\.1/g" config.toml
                   echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
                   #sed -i "s/22/\$ctlportstr/g" config.toml
 
@@ -91,21 +93,29 @@ spec:
 
                   # get system variables
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show variables;' | tee /upgrade-test/precheck-result/systemvariable_pre.txt
-                  cat /upgrade-test/precheck-result/systemvariable_pre.txt
+                  # cat /upgrade-test/precheck-result/systemvariable_pre.txt
+                  sleep 5s
+
+                  # get tidb configs
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'select @@tidb_config;' | tee /upgrade-test/precheck-result/precheck-tidb.txt
+                  cat /upgrade-test/precheck-result/precheck-tidb.txt
+                  sleep 5s
 
                   # create user and get user privi
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create user qatest;grant Create on *.* to qatest;'
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/precheck-result/qatest-priv-pre.txt
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for root;' >> /upgrade-test/precheck-result/qatest-priv-pre.txt
                   cat /upgrade-test/precheck-result/qatest-priv-pre.txt
+                  sleep 5s
 
                   #------test cluster_status, config default value, system variables
                   cd /upgrade-test/Function_Test
                   pytest precheck_test.py 
+                  sleep 5s
 
                   #------tiflash--------
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'alter table bank.account SET TIFLASH REPLICA 1;' 
-                  sleep 5s
+                  sleep 30s
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "SELECT * FROM information_schema.tiflash_replica WHERE TABLE_SCHEMA = 'bank' and TABLE_NAME = 'account';"
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'desc select count(uid) from bank.account;' | tee /upgrade-test/precheck-result/tiflash-precheck.txt
                   count=\`grep "tiflash" /upgrade-test/precheck-result/tiflash-precheck.txt | wc -l\`

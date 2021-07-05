@@ -85,7 +85,7 @@ spec:
       spec:
         resourceRequest: $(params.run-id)
         tidbCluster:
-          tiupMirror: https://tiup-mirrors.pingcap.com
+          tiupMirror: http://staging.tiup-server.pingcap.net
           global:
             deployDir: "/disks1/deploy"
             dataDir: "/disks1/data"  
@@ -96,17 +96,12 @@ spec:
               replication.location-labels: ["zone", "host"] 
               enable-placement-rules: true
               enable-redact-log: true
-              schedule.low-space-ratio: 0.9
-              replication.max-replicas: 1 
+              schedule.low-space-ratio: 0.9 
             tidb: |-
-              graceful-wait-before-shutdown: 1
               oom-use-tmp-storage: false
               tmp-storage-quota: 8000000
-              skip-register-to-dashboard: true
-              enable-telemetry: false
               repair-mode: true
               new_collations_enabled_on_first_bootstrap: true
-              performance.gogc: 80
               tikv-client.enable-chunk-rpc: false
               tikv-client.store-liveness-timeout: "2s"
               stmt-summary.enable-internal-query: true
@@ -115,10 +110,8 @@ spec:
               oom-action: cancel
               performance.max-memory: 5000
               performance.max-txn-ttl: 600000
-              performance.feedback-probability: 0.05
               performance.query-feedback-limit: 1024
               tikv-client.copr-cache.admission-min-process-ms: 5
-              tikv-client.copr-cache.admission-max-ranges: 500
               alter-primary-key: true
               enable-streaming: false
             tikv: |-

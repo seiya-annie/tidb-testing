@@ -6,7 +6,10 @@ metadata:
 spec:
   params:
     - name: run-id
+      type: string 
+    - name: init-version
       type: string
+      default: v4.0.6 
   workspaces:
   - name: manifest
     mountPath: /adhoc-manifests
@@ -36,7 +39,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload
-              image: hub.pingcap.net/migration-test/migration:v17
+              image: hub.pingcap.net/migration-test/migration:v29
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -71,14 +74,15 @@ spec:
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
                   ctlipstr=\`echo $ctlip | sed 's/\./\\\\./g'\`
                   ctlportstr=\`echo $ctlport\`
+                  version=\`echo $(params.init-version)\`
                   #sed -i "s/Chrome/headlessChrome/g" keywords/variables.robot
                   sed -i "s/172\.16\.5\.101/\$ctlipstr/g" keywords/variables.robot
                   sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
                   sed -i "s/172\.16\.5\.101/\$ctlipstr/g" config.toml
                   sed -i "s/172\.16\.4\.82/\$ctlipstr/g" config.toml
-                  sed -i "s/v5\.0\.0/v5\.0\.1/g" config.toml
+                  sed -i "s/v5\.0\.0/\$version/g" config.toml
                   echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
-                  #sed -i "s/22/\$ctlportstr/g" config.toml
+                  # sed -i "s/22/\$ctlportstr/g" config.toml
 
                   cat keywords/variables.robot
                   cat config.toml
@@ -97,9 +101,10 @@ spec:
                   sleep 5s
 
                   # get tidb configs
-                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'select @@tidb_config;' | tee /upgrade-test/precheck-result/precheck-tidb.txt
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "select @@tidb_config\\G;"| tee /upgrade-test/precheck-result/precheck-tidb.txt
                   cat /upgrade-test/precheck-result/precheck-tidb.txt
                   sleep 5s
+                  ls /upgrade-test/precheck-result
 
                   # create user and get user privi
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create user qatest;grant Create on *.* to qatest;'
@@ -122,6 +127,27 @@ spec:
                   if [ \$count -gt 0 ]; then
                       echo "tiflash work normal"
                   fi
+                  cat /upgrade-test/precheck-result/tiflash-precheck.txt
+
+                  #--------sql binding----
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'source /tools/sqltest/binding1.test;' 
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'source /tools/sqltest/binding2.test;' 
+                  sleep 5s
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show global bindings;'
+
+                  #--------tptest----
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create database tptest;'
+                  cd /tools/tp-test
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" init
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general1.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general2.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/multi-table.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/prepared-stmt.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general1_exp.yy --test 20
+                  \`nohup ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest"  run --dsn1 "root:@tcp(\$tidbHost:\$tidbPort)/tptest" \
+                   --dsn2 "root:@tcp(172.16.5.101:4000)/test" --test 100 > tptest.log 2>&1 & \`
+                  sleep 1000
+                  tail -n 50 tptest.log 
 
 
                                      

@@ -6,6 +6,9 @@ spec:
   params:
     - name: run-id
       type: string
+    - name: target-version
+      type: string
+      default: v5.0.2  
   workspaces:
   - name: manifest
     mountPath: /adhoc-manifests
@@ -36,7 +39,7 @@ spec:
               resourceRequest:
                 name: "$(params.run-id)"
                 node: workload2
-              image: hub.pingcap.net/migration-test/migration:v18
+              image: hub.pingcap.net/migration-test/migration:v29
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/bash
@@ -61,12 +64,13 @@ spec:
                   tidbHoststr=\`echo $tidbHost | sed 's/\./\\\\./g'\`
                   ctlipstr=\`echo $ctlip | sed 's/\./\\\\./g'\`
                   ctlportstr=\`echo $ctlport\`
+                  targetver=\`echo $(params.target-version)\`
                   #sed -i "s/Chrome/headlessChrome/g" keywords/variables.robot
                   sed -i "s/172\.16\.5\.101/\$ctlipstr/g" keywords/variables.robot
                   sed -i "s/cluster_control_ip = \"172.16.5.101\"/cluster_control_ip = \"\$ctlipstr\"/g" config.toml
                   sed -i "s/172\.16\.5\.101/\$ctlipstr/g" config.toml
                   sed -i "s/172\.16\.4\.82/\$ctlipstr/g" config.toml
-                  sed -i "s/v5\.0\.0/v5\.0\.1/g" config.toml
+                  sed -i "s/v5\.0\.0/\$targetver/g" config.toml
                   echo "ctl ip is ($ctlip), ctl port is ($ctlport)"
                   #sed -i "s/22/\$ctlportstr/g" config.toml
 
@@ -87,9 +91,10 @@ spec:
                   sleep 5s
 
                   #------- get tidb configs---------
-                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'select @@tidb_config;' > /upgrade-test/precheck-result/postcheck-tidb.txt
-                  cat /upgrade-test/precheck-result/postcheck-tidb.txt
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e "select @@tidb_config\\G;" > /upgrade-test/postcheck-result/postcheck-tidb.txt
+                  cat /upgrade-test/postcheck-result/postcheck-tidb.txt
                   sleep 5s
+                  ls /upgrade-test/postcheck-result/
 
                   #--------get user privi-----------
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/postcheck-result/qatest-priv-post.txt
@@ -99,14 +104,39 @@ spec:
                   pytest postcheck_test.py 
                   sleep 5s
 
+                  #--------get diff result-----------
+                  ls /upgrade-test/postcheck-result/
+                  sleep 5s
+                  cat /upgrade-test/postcheck-result/pddiff.txt
+                  cat /upgrade-test/postcheck-result/tidbdiff.txt
+                  cat /upgrade-test/postcheck-result/vardiff.txt
+                  # cat /upgrade-test/postcheck-result/tiflashdiff.txt
+
                   #------tiflash--------
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'desc select count(uid) from bank.account;' |tee /upgrade-test/postcheck-result/tiflash-postcheck.txt
                   count=\`grep "tiflash" /upgrade-test/postcheck-result/tiflash-postcheck.txt | wc -l\`
                   if [ \$count -gt 0 ]; then
                       echo "tiflash work normal"
                   fi
+                  cat /upgrade-test/postcheck-result/tiflash-postcheck.txt
 
-                  sleep 5000s
+                  #--------sql binding----
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show global bindings;' | tee /upgrade-test/show-global-binding.txt
+
+                 
+                  # #--------tptest----
+                  mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create database tptest;'
+                  cd /tools/tp-test
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" init
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general1.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general2.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/multi-table.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/prepared-stmt.yy --test 20
+                  ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest" gen ./scenarios/general1_exp.yy --test 20
+                  \`nohup ./tp-test --store "root:@tcp(\$tidbHost:\$tidbPort)/tptest"  run --dsn1 "root:@tcp(\$tidbHost:\$tidbPort)/tptest" \
+                   --dsn2 "root:@tcp(172.16.5.101:4000)/test" --test 100 > tptest.log 2>&1 & \`
+                  sleep 1000
+                  tail -n 50 tptest.log 
 
                   
                   

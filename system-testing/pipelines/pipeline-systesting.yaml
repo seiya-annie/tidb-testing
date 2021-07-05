@@ -12,7 +12,7 @@ spec:
       default: v4.0.9
     - name: target-version
       type: string
-      default: v4.0.10
+      default: v5.0.2
   workspaces:
     - name: manifest
   tasks:
@@ -36,6 +36,8 @@ spec:
         - name: run-id
           value:
           value: "$(params.run-id)"
+        - name: init-version
+          value: "$(params.init-version)"
       workspaces:
         - name: manifest
           workspace: manifest
@@ -62,14 +64,16 @@ spec:
         - name: run-id
           value:
           value: "$(params.run-id)"
+        - name: target-version
+          value: "$(params.target-version)"
       workspaces:
         - name: manifest
           workspace: manifest      
-    # - name: teardown
-    #   taskRef:
-    #     name: systesting-teardown
-    #   runAfter:
-    #     - postcheck-run
-    #   params:
-    #     - name: run-id
-    #       value: "$(params.run-id)"
+    - name: teardown
+      taskRef:
+        name: systesting-teardown
+      runAfter:
+        - postcheck-run
+      params:
+        - name: run-id
+          value: "$(params.run-id)"

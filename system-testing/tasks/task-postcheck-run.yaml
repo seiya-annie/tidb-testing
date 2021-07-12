@@ -96,6 +96,7 @@ spec:
                   sleep 5s
                   ls /upgrade-test/postcheck-result/
 
+
                   #--------get user privi-----------
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/postcheck-result/qatest-priv-post.txt
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for root;' >> /upgrade-test/postcheck-result/qatest-priv-post.txt
@@ -118,6 +119,10 @@ spec:
                   if [ \$count -gt 0 ]; then
                       echo "tiflash work normal"
                   fi
+                  cat /upgrade-test/postcheck-result/tiflash-postcheck.txt
+
+                  # get tiflash configs
+                  echo "select * from settings" | curl 'http://\$ctlip:8123/\?'  --data-binary @- >> /upgrade-test/postcheck-result/tiflash-postcheck.txt
                   cat /upgrade-test/postcheck-result/tiflash-postcheck.txt
 
                   #--------sql binding----

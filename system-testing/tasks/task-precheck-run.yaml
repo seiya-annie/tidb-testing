@@ -106,6 +106,7 @@ spec:
                   sleep 5s
                   ls /upgrade-test/precheck-result
 
+
                   # create user and get user privi
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'create user qatest;grant Create on *.* to qatest;'
                   mysql -uroot -P "\$tidbPort" -h "\$tidbHost" -e 'show grants for qatest;' > /upgrade-test/precheck-result/qatest-priv-pre.txt
@@ -127,6 +128,10 @@ spec:
                   if [ \$count -gt 0 ]; then
                       echo "tiflash work normal"
                   fi
+                  cat /upgrade-test/precheck-result/tiflash-precheck.txt
+
+                  # get tiflash configs
+                  echo "select * from settings" | curl 'http://\$ctlip:8123/\?'  --data-binary @- >> /upgrade-test/precheck-result/tiflash-precheck.txt
                   cat /upgrade-test/precheck-result/tiflash-precheck.txt
 
                   #--------sql binding----
